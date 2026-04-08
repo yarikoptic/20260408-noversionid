@@ -1,0 +1,46 @@
+== Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001499
+trusted repositories: 0
+semitrusted repositories: 6
+	00000000-0000-0000-0000-000000000001 -- web
+	00000000-0000-0000-0000-000000000002 -- bittorrent
+	29c5ea65-949e-48d9-920e-7ebf96d4fe7c -- [s3-PUBLIC]
+	38a72518-b9f2-4577-a391-7a0300e0424f -- [s3-PRIVATE]
+	79c043d6-ea4f-45ec-94d0-791047a6bba5 -- root@04f42044453f:/datalad/ds001499
+	cf8dbb7c-e933-4d26-a52e-fd3c0dedc138 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001499 [here]
+untrusted repositories: 0
+transfers in progress: none
+available local disk space: 13.81 terabytes (+0 bytes reserved)
+local annex keys: 1
+local annex size: 157.27 megabytes
+annexed files in working tree: 9995
+size of annexed files in working tree: 300.92 gigabytes
+combined annex size of all repositories: 901.96 gigabytes
+annex sizes of repositories: 
+	 300.9 GB: 29c5ea65-949e-48d9-920e-7ebf96d4fe7c -- [s3-PUBLIC]
+	 300.9 GB: 79c043d6-ea4f-45ec-94d0-791047a6bba5 -- root@04f42044453f:/datalad/ds001499
+	   300 GB: 38a72518-b9f2-4577-a391-7a0300e0424f -- [s3-PRIVATE]
+	157.27 MB: cf8dbb7c-e933-4d26-a52e-fd3c0dedc138 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001499 [here]
+backend usage: 
+	MD5E: 9995
+bloom filter size: 32 mebibytes (0% full)
+29c5ea65-949e-48d9-920e-7ebf96d4fe7c autoenable=true bucket=openneuro.org datacenter=US encryption=none exporttree=yes fileprefix=ds001499/ host=s3.amazonaws.com name=s3-PUBLIC partsize=1GiB port=80 public=yes publicurl=https://s3.amazonaws.com/openneuro.org storageclass=STANDARD type=S3 versioning=yes timestamp=1597694087.605435852s
+whereis sub-CSI1/ses-01/func/sub-CSI1_ses-01_task-5000scenes_run-01_bold.nii.gz (4 copies) 
+  	29c5ea65-949e-48d9-920e-7ebf96d4fe7c -- [s3-PUBLIC]
+  	38a72518-b9f2-4577-a391-7a0300e0424f -- [s3-PRIVATE]
+  	79c043d6-ea4f-45ec-94d0-791047a6bba5 -- root@04f42044453f:/datalad/ds001499
+  	cf8dbb7c-e933-4d26-a52e-fd3c0dedc138 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001499 [here]
+ok
+---- Key before get
+-- d10/57d/MD5E-s157271840--b933438350a83069177ba5e128969bf8.nii.gz.log:
+1536696008.464245179s 1 29c5ea65-949e-48d9-920e-7ebf96d4fe7c
+1536334067.978786267s 1 38a72518-b9f2-4577-a391-7a0300e0424f
+1536323621.756658988s 1 79c043d6-ea4f-45ec-94d0-791047a6bba5
+1775667341s 1 cf8dbb7c-e933-4d26-a52e-fd3c0dedc138
+---- Let's fetch the beast
+---- Key after get
+-- d10/57d/MD5E-s157271840--b933438350a83069177ba5e128969bf8.nii.gz.log:
+1536696008.464245179s 1 29c5ea65-949e-48d9-920e-7ebf96d4fe7c
+1536334067.978786267s 1 38a72518-b9f2-4577-a391-7a0300e0424f
+1536323621.756658988s 1 79c043d6-ea4f-45ec-94d0-791047a6bba5
+1775667341s 1 cf8dbb7c-e933-4d26-a52e-fd3c0dedc138
+

@@ -1,0 +1,46 @@
+== Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506
+trusted repositories: 0
+semitrusted repositories: 6
+	00000000-0000-0000-0000-000000000001 -- web
+	00000000-0000-0000-0000-000000000002 -- bittorrent
+	018c7a59-8139-42a5-b974-0985fe1784b9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
+	810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+	8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+	ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+untrusted repositories: 0
+transfers in progress: none
+available local disk space: 13.81 terabytes (+0 bytes reserved)
+local annex keys: 1
+local annex size: 182.98 megabytes
+annexed files in working tree: 731
+size of annexed files in working tree: 104.83 gigabytes
+combined annex size of all repositories: 310.08 gigabytes
+annex sizes of repositories: 
+	103.32 GB: 810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+	103.29 GB: 8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+	103.29 GB: ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+	182.98 MB: 018c7a59-8139-42a5-b974-0985fe1784b9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
+backend usage: 
+	MD5E: 731
+bloom filter size: 32 mebibytes (0% full)
+ca9b233b-7567-48b3-89c7-efe7f6a97d4a autoenable=true bucket=openneuro.org datacenter=US encryption=none exporttree=yes fileprefix=ds001506/ host=s3.amazonaws.com name=s3-PUBLIC partsize=1GiB port=80 public=yes publicurl=https://s3.amazonaws.com/openneuro.org storageclass=STANDARD type=S3 versioning=yes timestamp=1597694532.975809605s
+whereis sub-01/ses-imagery01/func/sub-01_ses-imagery01_task-imagery_run-01_bold.nii.gz (4 copies) 
+  	018c7a59-8139-42a5-b974-0985fe1784b9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
+  	810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+  	8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+  	ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+ok
+---- Key before get
+-- 8dd/c33/MD5E-s182977181--671e748671f71a50e57d5977ae6dca8a.nii.gz.log:
+1775667366s 1 018c7a59-8139-42a5-b974-0985fe1784b9
+1536373329.020425986s 1 810b2f6b-fb98-4401-9130-6c84dd7ddc50
+1536374051.00839283s 1 8fdca7f0-84c3-4b1b-af9a-453effd5380c
+1536589227.222692566s 1 ca9b233b-7567-48b3-89c7-efe7f6a97d4a
+---- Let's fetch the beast
+---- Key after get
+-- 8dd/c33/MD5E-s182977181--671e748671f71a50e57d5977ae6dca8a.nii.gz.log:
+1775667366s 1 018c7a59-8139-42a5-b974-0985fe1784b9
+1536373329.020425986s 1 810b2f6b-fb98-4401-9130-6c84dd7ddc50
+1536374051.00839283s 1 8fdca7f0-84c3-4b1b-af9a-453effd5380c
+1536589227.222692566s 1 ca9b233b-7567-48b3-89c7-efe7f6a97d4a
+
