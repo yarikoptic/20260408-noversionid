@@ -3,10 +3,10 @@
 set -u
 
 echo '\
-ds000113 sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz
-ds001499 sub-CSI1/ses-01/func/sub-CSI1_ses-01_task-5000scenes_run-01_bold.nii.gz
-ds001506 sub-01/ses-imagery01/func/sub-01_ses-imagery01_task-imagery_run-01_bold.nii.gz
-ds006623 sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz' | while read ds file; do
+ds000113 sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz derivatives/linear_anatomical_alignment/sub-01/ses-forrestgump/func/sub-01_ses-forrestgump_task-forrestgump_rec-XFMdico7Tad2grpbold7Tad_run-01_bold.mat
+ds001499 sub-CSI1/ses-01/func/sub-CSI1_ses-01_task-5000scenes_run-01_bold.nii.gz derivatives/fmriprep/sub-CSI1/anat/sub-CSI1_T1w_preproc.nii.gz
+ds001506 sub-01/ses-imagery01/func/sub-01_ses-imagery01_task-imagery_run-01_bold.nii.gz sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
+ds006623 sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz derivatives/LOR_ROR_Timing.xlsx' | while read ds bad good; do
    rm -f "$ds.log"  # if we have it
    [ -e "$ds" ] && datalad remove -d $ds --reckless kill
    if [ -e "$ds" ] ; then
@@ -16,7 +16,15 @@ ds006623 sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz' | while read ds file
    git clone https://github.com/OpenNeuroDatasets/$ds.git ; 
    (
      cd $ds
-     ../check_annex_file "$file" 2>&1 | tee ../$ds.log
-   )
+     echo "Bad file: $bad"
+     ../check_annex_file "$bad" 2>&1 
+
+    if [ -n "$good" ] ; then
+         echo "Good file: $good"
+         ../check_annex_file "$good" 2>&1 
+    else
+        echo "No good one figured out"
+    fi
+   ) | tee $ds.log
 done
    
