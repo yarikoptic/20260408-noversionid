@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -eu
+
+for d in "$@"; do
+
+    echo "== Repository: $d"
+    (cd $d;
+        git show git-annex:remote.log | grep s3-PU
+        file=$(head -n1 <(git-annex find --not --in here --fast | grep '\.nii.gz'))
+        key=$(readlink $file | xargs basename)
+
+        git annex whereis $file
+
+        git ls-tree -r git-annex | grep $key | while read _ _ _ afile; do 
+            echo "-- $afile:"
+            git show git-annex:$afile;
+        done
+        git annex get "$file"
+    )
+    echo
+done

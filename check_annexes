@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -eu
+
+echo '\
+ds000113 sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz
+ds001499 sub-CSI1/ses-01/func/sub-CSI1_ses-01_task-5000scenes_run-01_bold.nii.gz
+ds001506 sub-01/ses-imagery01/func/sub-01_ses-imagery01_task-imagery_run-01_bold.nii.gz
+ds006623 sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz' | while read ds file; do
+   [ ! -e "$ds" ] || datalad remove -d $ds --nocheck 
+   git clone https://github.com/OpenNeuroDatasets/$ds.git ; 
+   (
+     cd $ds
+     ../check_annex_file "$file"
+   )
+done
+   
