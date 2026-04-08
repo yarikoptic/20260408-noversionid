@@ -1,3 +1,4 @@
+Bad file: sub-01/ses-imagery01/func/sub-01_ses-imagery01_task-imagery_run-01_bold.nii.gz
 == Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506
 
   Remote origin not usable by git-annex; setting annex-ignore
@@ -7,9 +8,9 @@ trusted repositories: 0
 semitrusted repositories: 6
 	00000000-0000-0000-0000-000000000001 -- web
 	00000000-0000-0000-0000-000000000002 -- bittorrent
-	4c85edbf-f7f9-4713-922e-a17b89f54303 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
 	810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
 	8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+	925f7870-3d3c-4e88-853f-18b979e9e8c9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
 	ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
 untrusted repositories: 0
 transfers in progress: none
@@ -58,8 +59,61 @@ ok
 (recording state in git...)
 ---- Key after get
 -- 8dd/c33/MD5E-s182977181--671e748671f71a50e57d5977ae6dca8a.nii.gz.log:
-1775668485s 1 4c85edbf-f7f9-4713-922e-a17b89f54303
 1536373329.020425986s 1 810b2f6b-fb98-4401-9130-6c84dd7ddc50
 1536374051.00839283s 1 8fdca7f0-84c3-4b1b-af9a-453effd5380c
+1775669654s 1 925f7870-3d3c-4e88-853f-18b979e9e8c9
 1536589227.222692566s 1 ca9b233b-7567-48b3-89c7-efe7f6a97d4a
+
+Good file: sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
+== Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506
+trusted repositories: 0
+semitrusted repositories: 6
+	00000000-0000-0000-0000-000000000001 -- web
+	00000000-0000-0000-0000-000000000002 -- bittorrent
+	810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+	8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+	925f7870-3d3c-4e88-853f-18b979e9e8c9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
+	ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+untrusted repositories: 0
+transfers in progress: none
+available local disk space: 13.81 terabytes (+0 bytes reserved)
+local annex keys: 1
+local annex size: 182.98 megabytes
+annexed files in working tree: 731
+size of annexed files in working tree: 104.83 gigabytes
+combined annex size of all repositories: 310.08 gigabytes
+annex sizes of repositories: 
+	103.32 GB: 810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+	103.29 GB: 8fdca7f0-84c3-4b1b-af9a-453effd5380c -- [s3-PRIVATE]
+	103.29 GB: ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+	182.98 MB: 925f7870-3d3c-4e88-853f-18b979e9e8c9 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds001506 [here]
+backend usage: 
+	MD5E: 731
+bloom filter size: 32 mebibytes (0% full)
+ca9b233b-7567-48b3-89c7-efe7f6a97d4a autoenable=true bucket=openneuro.org datacenter=US encryption=none exporttree=yes fileprefix=ds001506/ host=s3.amazonaws.com name=s3-PUBLIC partsize=1GiB port=80 public=yes publicurl=https://s3.amazonaws.com/openneuro.org storageclass=STANDARD type=S3 versioning=yes timestamp=1597694532.975809605s
+whereis sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz (2 copies) 
+  	810b2f6b-fb98-4401-9130-6c84dd7ddc50 -- root@b3ba225d5547:/datalad/ds001506
+  	ca9b233b-7567-48b3-89c7-efe7f6a97d4a -- [s3-PUBLIC]
+
+  s3-PUBLIC: https://s3.amazonaws.com/openneuro.org/ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz?versionId=lbqQRjbfnmHfiJjNSyLQmGt6wYP.fKtM
+  s3-PUBLIC: https://s3.amazonaws.com/openneuro.org/ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz?versionId=rCTpVy0aiy6Dv7K0DqNNzJbD_sc54stQ
+ok
+---- Key before get
+-- 795/a3b/MD5E-s3583--fcc6092d57ea20d0d9d6107ce1626a60.nii.gz.log:
+1542777705.38048028s 1 810b2f6b-fb98-4401-9130-6c84dd7ddc50
+1542777925.179513762s 1 ca9b233b-7567-48b3-89c7-efe7f6a97d4a
+-- 795/a3b/MD5E-s3583--fcc6092d57ea20d0d9d6107ce1626a60.nii.gz.log.rmet:
+1542777925.178447804s ca9b233b-7567-48b3-89c7-efe7f6a97d4a:V +lbqQRjbfnmHfiJjNSyLQmGt6wYP.fKtM#ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
+1594680673.618948741s ca9b233b-7567-48b3-89c7-efe7f6a97d4a:V +rCTpVy0aiy6Dv7K0DqNNzJbD_sc54stQ#ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
+---- Let's fetch the beast
+get sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz (from s3-PUBLIC...) ok
+(recording state in git...)
+---- Key after get
+-- 795/a3b/MD5E-s3583--fcc6092d57ea20d0d9d6107ce1626a60.nii.gz.log:
+1542777705.38048028s 1 810b2f6b-fb98-4401-9130-6c84dd7ddc50
+1775669656s 1 925f7870-3d3c-4e88-853f-18b979e9e8c9
+1542777925.179513762s 1 ca9b233b-7567-48b3-89c7-efe7f6a97d4a
+-- 795/a3b/MD5E-s3583--fcc6092d57ea20d0d9d6107ce1626a60.nii.gz.log.rmet:
+1542777925.178447804s ca9b233b-7567-48b3-89c7-efe7f6a97d4a:V +lbqQRjbfnmHfiJjNSyLQmGt6wYP.fKtM#ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
+1594680673.618948741s ca9b233b-7567-48b3-89c7-efe7f6a97d4a:V +rCTpVy0aiy6Dv7K0DqNNzJbD_sc54stQ#ds001506/sourcedata/sub-01/anat/sub-01_mask_RH_LOC.nii.gz
 

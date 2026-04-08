@@ -1,3 +1,4 @@
+Bad file: sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz
 == Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623
 
   Remote origin not usable by git-annex; setting annex-ignore
@@ -8,7 +9,7 @@ semitrusted repositories: 5
 	00000000-0000-0000-0000-000000000001 -- web
 	00000000-0000-0000-0000-000000000002 -- bittorrent
 	185fe801-93f0-42d1-b387-a3568a0b374a -- OpenNeuro
-	6d62767e-a4b7-4963-b852-3e4a17ff4a4b -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623 [here]
+	aaf20a61-8bd3-4499-8b6d-735f9010afb6 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623 [here]
 	bc48e5c8-a682-4c64-99b4-455864cff519 -- [s3-PUBLIC]
 untrusted repositories: 0
 transfers in progress: none
@@ -40,3 +41,55 @@ get sub-02/func/sub-02_task-imagery_run-1_bold.nii.gz (not available)
   (Note that these git remotes have annex-ignore set: origin)
 failed
 get: 1 failed
+Good file: derivatives/LOR_ROR_Timing.xlsx
+== Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623
+trusted repositories: 0
+semitrusted repositories: 5
+	00000000-0000-0000-0000-000000000001 -- web
+	00000000-0000-0000-0000-000000000002 -- bittorrent
+	185fe801-93f0-42d1-b387-a3568a0b374a -- OpenNeuro
+	aaf20a61-8bd3-4499-8b6d-735f9010afb6 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623 [here]
+	bc48e5c8-a682-4c64-99b4-455864cff519 -- [s3-PUBLIC]
+untrusted repositories: 0
+transfers in progress: none
+available local disk space: 13.81 terabytes (+0 bytes reserved)
+local annex keys: 0
+local annex size: 0 bytes
+annexed files in working tree: 39797
+size of annexed files in working tree: 1.58 terabytes
+combined annex size of all repositories: 2.15 terabytes
+annex sizes of repositories: 
+	  1.57 TB: 185fe801-93f0-42d1-b387-a3568a0b374a -- OpenNeuro
+	559.37 GB: bc48e5c8-a682-4c64-99b4-455864cff519 -- [s3-PUBLIC]
+	 19.29 GB: 83729bc3-b1df-4e9d-a2b5-3a4870245840
+backend usage: 
+	SHA256E: 39797
+bloom filter size: 32 mebibytes (0% full)
+bc48e5c8-a682-4c64-99b4-455864cff519 autoenable=true bucket=openneuro.org datacenter=US encryption=none exporttree=yes fileprefix=ds006623/ host=s3.amazonaws.com name=s3-PUBLIC partsize=1GiB port=80 public=no publicurl=https://s3.amazonaws.com/openneuro.org storageclass=STANDARD type=S3 versioning=yes timestamp=1763435878s
+whereis derivatives/LOR_ROR_Timing.xlsx (3 copies) 
+  	185fe801-93f0-42d1-b387-a3568a0b374a -- OpenNeuro
+  	83729bc3-b1df-4e9d-a2b5-3a4870245840
+  	bc48e5c8-a682-4c64-99b4-455864cff519 -- [s3-PUBLIC]
+
+  s3-PUBLIC: https://s3.amazonaws.com/openneuro.org/ds006623/derivatives/LOR_ROR_Timing.xlsx?versionId=v5jxEV11OqMgSrgBpB4.bvGjsA7jj6AO
+ok
+---- Key before get
+-- aad/98d/SHA256E-s11831--8d5ec817487cdf4e2054ee0ccd51db486f1b7e5433ff2ce0ef50d1e79540f3c9.xlsx.log:
+1757437919s 1 185fe801-93f0-42d1-b387-a3568a0b374a
+1763431795s 1 83729bc3-b1df-4e9d-a2b5-3a4870245840
+1762376967s 1 bc48e5c8-a682-4c64-99b4-455864cff519
+-- aad/98d/SHA256E-s11831--8d5ec817487cdf4e2054ee0ccd51db486f1b7e5433ff2ce0ef50d1e79540f3c9.xlsx.log.rmet:
+1762376967s bc48e5c8-a682-4c64-99b4-455864cff519:V +v5jxEV11OqMgSrgBpB4.bvGjsA7jj6AO#ds006623/derivatives/LOR_ROR_Timing.xlsx
+---- Let's fetch the beast
+get derivatives/LOR_ROR_Timing.xlsx (from s3-PUBLIC...) (scanning for annexed files...)
+ok
+(recording state in git...)
+---- Key after get
+-- aad/98d/SHA256E-s11831--8d5ec817487cdf4e2054ee0ccd51db486f1b7e5433ff2ce0ef50d1e79540f3c9.xlsx.log:
+1757437919s 1 185fe801-93f0-42d1-b387-a3568a0b374a
+1763431795s 1 83729bc3-b1df-4e9d-a2b5-3a4870245840
+1775669777s 1 aaf20a61-8bd3-4499-8b6d-735f9010afb6
+1762376967s 1 bc48e5c8-a682-4c64-99b4-455864cff519
+-- aad/98d/SHA256E-s11831--8d5ec817487cdf4e2054ee0ccd51db486f1b7e5433ff2ce0ef50d1e79540f3c9.xlsx.log.rmet:
+1762376967s bc48e5c8-a682-4c64-99b4-455864cff519:V +v5jxEV11OqMgSrgBpB4.bvGjsA7jj6AO#ds006623/derivatives/LOR_ROR_Timing.xlsx
+
