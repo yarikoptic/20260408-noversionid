@@ -1,17 +1,21 @@
 == Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds000113
+
+  Remote origin not usable by git-annex; setting annex-ignore
+
+  https://github.com/OpenNeuroDatasets/ds000113.git/config download failed: Not Found
 trusted repositories: 0
 semitrusted repositories: 6
 	00000000-0000-0000-0000-000000000001 -- web
 	00000000-0000-0000-0000-000000000002 -- bittorrent
-	0fb36e8e-02cb-4b7e-9aec-651c3475e632 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds000113 [here]
 	66a7004d-a15e-4764-90cd-54bbd179f74a -- [s3-PRIVATE]
 	b8b60a40-f339-4ddc-b08a-2a6f645bd3ef -- root@8dc3dbd70baf:/datalad/ds001473
 	e28d70a7-9314-4542-a4ce-7d95b862070f -- [s3-PUBLIC]
+	e7b0a4f6-062e-4076-94f3-4cecc78cfe12 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds000113 [here]
 untrusted repositories: 0
 transfers in progress: none
 available local disk space: 13.81 terabytes (+0 bytes reserved)
-local annex keys: 1
-local annex size: 161.02 megabytes
+local annex keys: 0
+local annex size: 0 bytes
 annexed files in working tree: 4895
 size of annexed files in working tree: 452.42 gigabytes
 combined annex size of all repositories: 1.16 terabytes
@@ -19,28 +23,44 @@ annex sizes of repositories:
 	452.42 GB: b8b60a40-f339-4ddc-b08a-2a6f645bd3ef -- root@8dc3dbd70baf:/datalad/ds001473
 	452.42 GB: e28d70a7-9314-4542-a4ce-7d95b862070f -- [s3-PUBLIC]
 	259.96 GB: 66a7004d-a15e-4764-90cd-54bbd179f74a -- [s3-PRIVATE]
-	161.02 MB: 0fb36e8e-02cb-4b7e-9aec-651c3475e632 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds000113 [here]
 backend usage: 
 	MD5E: 4895
 bloom filter size: 32 mebibytes (0% full)
 e28d70a7-9314-4542-a4ce-7d95b862070f autoenable=true bucket=openneuro.org datacenter=US encryption=none exporttree=yes fileprefix=ds000113/ host=s3.amazonaws.com name=s3-PUBLIC partsize=1GiB port=80 public=yes publicurl=https://s3.amazonaws.com/openneuro.org storageclass=STANDARD type=S3 versioning=yes timestamp=1597694369.712881988s
-whereis sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz (4 copies) 
-  	0fb36e8e-02cb-4b7e-9aec-651c3475e632 -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds000113 [here]
+whereis sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz (3 copies) 
   	66a7004d-a15e-4764-90cd-54bbd179f74a -- [s3-PRIVATE]
   	b8b60a40-f339-4ddc-b08a-2a6f645bd3ef -- root@8dc3dbd70baf:/datalad/ds001473
   	e28d70a7-9314-4542-a4ce-7d95b862070f -- [s3-PUBLIC]
 ok
 ---- Key before get
 -- 23a/e1e/MD5E-s161017800--e3d1a133a2b66ddc0bfbb6941fa7ef14.nii.gz.log:
-1775667247s 1 0fb36e8e-02cb-4b7e-9aec-651c3475e632
 1534885659.567118843s 1 66a7004d-a15e-4764-90cd-54bbd179f74a
 1534864953.82370134s 1 b8b60a40-f339-4ddc-b08a-2a6f645bd3ef
 1536597721.51113742s 1 e28d70a7-9314-4542-a4ce-7d95b862070f
 ---- Let's fetch the beast
+get sub-01/ses-auditoryperception/func/sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold.nii.gz (from s3-PRIVATE...) 
+  Remote is configured to use versioning, but no S3 version ID is recorded for this key
+
+  download failed: invalid url
+(Delaying 1s before retrying....)
+
+  Remote is configured to use versioning, but no S3 version ID is recorded for this key
+
+  download failed: invalid url
+(Delaying 2s before retrying....)
+
+  Remote is configured to use versioning, but no S3 version ID is recorded for this key
+
+  download failed: invalid url
+(from s3-PUBLIC...) 
+  Remote is configured to use versioning, but no S3 version ID is recorded for this key
+(scanning for annexed files...)
+ok
+(recording state in git...)
 ---- Key after get
 -- 23a/e1e/MD5E-s161017800--e3d1a133a2b66ddc0bfbb6941fa7ef14.nii.gz.log:
-1775667247s 1 0fb36e8e-02cb-4b7e-9aec-651c3475e632
 1534885659.567118843s 1 66a7004d-a15e-4764-90cd-54bbd179f74a
 1534864953.82370134s 1 b8b60a40-f339-4ddc-b08a-2a6f645bd3ef
 1536597721.51113742s 1 e28d70a7-9314-4542-a4ce-7d95b862070f
+1775668377s 1 e7b0a4f6-062e-4076-94f3-4cecc78cfe12
 

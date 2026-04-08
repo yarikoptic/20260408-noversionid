@@ -1,10 +1,14 @@
 == Repository: /mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623
+
+  Remote origin not usable by git-annex; setting annex-ignore
+
+  https://github.com/OpenNeuroDatasets/ds006623.git/config download failed: Not Found
 trusted repositories: 0
 semitrusted repositories: 5
 	00000000-0000-0000-0000-000000000001 -- web
 	00000000-0000-0000-0000-000000000002 -- bittorrent
 	185fe801-93f0-42d1-b387-a3568a0b374a -- OpenNeuro
-	acdadcf3-6380-4cc5-8472-baca19184fcb -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623 [here]
+	6d62767e-a4b7-4963-b852-3e4a17ff4a4b -- yoh@smaug:/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid/ds006623 [here]
 	bc48e5c8-a682-4c64-99b4-455864cff519 -- [s3-PUBLIC]
 untrusted repositories: 0
 transfers in progress: none
