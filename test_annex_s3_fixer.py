@@ -291,7 +291,11 @@ def ds000113_clone(tmp_path_factory):
         ["git", "clone", DS000113_URL, dest],
         check=True, capture_output=True, text=True,
     )
-    # git annex init properly fetches and merges origin/git-annex
+    # Private clone: don't leak our temporary UUID into the git-annex branch
+    subprocess.run(
+        ["git", "config", "annex.private", "true"],
+        check=True, capture_output=True, cwd=dest,
+    )
     subprocess.run(
         ["git", "annex", "init", "test-integration"],
         check=True, capture_output=True, text=True, cwd=dest,
@@ -395,6 +399,10 @@ class TestEndToEndFix:
         subprocess.run(
             ["git", "clone", DS000113_URL, dest],
             check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "config", "annex.private", "true"],
+            check=True, capture_output=True, cwd=dest,
         )
         subprocess.run(
             ["git", "annex", "init", "test-disposable"],
