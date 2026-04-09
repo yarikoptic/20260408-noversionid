@@ -509,69 +509,83 @@ def find_files_without_urls(ctx, remote):
     )
 
 
-@cli.command("fix-missing-s3-urls")
-@click.option(
-    "--remote", default="s3-PUBLIC",
-    help="S3 remote name (default: s3-PUBLIC)",
-)
-@click.option(
-    "--dry-run/--apply", default=True,
-    help="Dry run (default) or apply changes to git-annex branch",
-)
-@click.option(
-    "--limit", type=int, default=0,
-    help="Limit number of keys to fix (0=all)",
-)
-@click.pass_context
-def fix_missing_s3_urls(ctx, remote, dry_run, limit):
-    """Fix keys missing .log.rmet by querying S3 for version IDs."""
-    repo = ctx.obj["repo"]
-    verbose = ctx.obj["verbose"]
+def find_all_versioned_s3_remotes(remotes: dict) -> list[tuple[str, dict]]:
+    """Find all S3 remotes with versioning=yes.
 
-    # Parse remote.log
-    remote_log = git_show("git-annex:remote.log", cwd=repo)
-    remotes = parse_remote_log(remote_log)
-    s3_info = find_s3_remote(remotes, remote)
-    if s3_info is None:
-        click.echo(f"ERROR: Remote '{remote}' not found", err=True)
-        sys.exit(1)
-    remote_uuid, remote_attrs = s3_info
+    Returns list of (uuid, attrs) sorted by name.
+    """
+    results = []
+    for uuid, attrs in remotes.items():
+        if attrs.get("type") == "S3" and attrs.get("versioning") == "yes":
+            results.append((uuid, attrs))
+    results.sort(key=lambda x: x[1].get("name", ""))
+    return results
+
+
+def _fix_remote(
+    repo: str,
+    remote_name: str,
+    remote_uuid: str,
+    remote_attrs: dict,
+    groups: dict,
+    key_to_filepath: dict,
+    dry_run: bool,
+    limit: int,
+) -> tuple[list[tuple[str, str]], dict]:
+    """Fix missing .log.rmet for one S3 remote.
+
+    Returns (fixes_list, stats_dict).
+    """
     bucket = remote_attrs.get("bucket", "")
     fileprefix = remote_attrs.get("fileprefix", "")
 
-    click.echo(f"Remote: {remote} (uuid={remote_uuid})", err=True)
-    click.echo(f"Bucket: {bucket}, prefix: {fileprefix}", err=True)
+    click.echo(f"\nRemote: {remote_name} (uuid={remote_uuid})", err=True)
+    click.echo(f"  Bucket: {bucket}, prefix: {fileprefix}", err=True)
 
-    # Find keys missing .log.rmet that are on this remote
-    entries = git_ls_tree_annex(cwd=repo)
-    groups = group_annex_keys(entries)
+    # Check if we can access this remote
+    is_public = remote_attrs.get("public") == "yes"
+    if not is_public:
+        click.echo(
+            f"  Skipping {remote_name} (public=no, set AWS credentials to fix)",
+            err=True,
+        )
+        return [], {"skipped_private": True}
 
-    missing_keys = []  # list of (key, log_path, log_content)
+    # Find keys missing .log.rmet for THIS remote.
+    # A key needs fixing if:
+    #   - its .log shows it's present on this remote
+    #   - its .log.rmet either doesn't exist, or doesn't contain an entry for this remote
+    missing_keys = []  # list of (key, log_path, log_entries, existing_rmet_content)
     for stem, suffixes in sorted(groups.items()):
-        if "log" not in suffixes or "rmet" in suffixes:
+        if "log" not in suffixes:
             continue
         log_content = git_show(f"git-annex:{suffixes['log']}", cwd=repo)
         log_entries = parse_log_file(log_content)
-        on_remote = [
-            e for e in log_entries
-            if e["uuid"] == remote_uuid and e["present"]
-        ]
+        on_remote = any(
+            e["uuid"] == remote_uuid and e["present"]
+            for e in log_entries
+        )
         if not on_remote:
             continue
-        key = extract_key_from_annex_path(suffixes["log"])
-        missing_keys.append((key, suffixes["log"], log_entries))
 
-    click.echo(f"Found {len(missing_keys)} keys needing fix", err=True)
+        # Check if .log.rmet already has an entry for this remote
+        existing_rmet = ""
+        if "rmet" in suffixes:
+            existing_rmet = git_show(f"git-annex:{suffixes['rmet']}", cwd=repo)
+            if f"{remote_uuid}:V" in existing_rmet:
+                continue  # already has rmet for this remote
+
+        key = extract_key_from_annex_path(suffixes["log"])
+        missing_keys.append((key, suffixes["log"], log_entries, existing_rmet))
+
+    click.echo(f"  Found {len(missing_keys)} keys needing fix", err=True)
 
     if not missing_keys:
-        return
-
-    # Build key -> filepath mapping from current tree
-    key_to_filepath = _build_key_filepath_map(repo)
+        return [], {"total": 0, "fixed": 0}
 
     # Identify keys not in current tree for export tree lookup
-    all_missing_key_names = {k for k, _, _ in missing_keys}
-    keys_not_in_tree = all_missing_key_names - set(key_to_filepath)
+    missing_key_names = {k for k, _, _, _ in missing_keys}
+    keys_not_in_tree = missing_key_names - set(key_to_filepath)
     if keys_not_in_tree:
         lgr.info(
             "%d keys not in current tree, searching export trees...",
@@ -581,22 +595,16 @@ def fix_missing_s3_urls(ctx, remote, dry_run, limit):
             repo, remote_uuid, keys_not_in_tree,
         )
         key_to_filepath.update(export_map)
-        still_missing = keys_not_in_tree - set(export_map)
-        if still_missing:
-            lgr.info(
-                "%d keys not found in export trees either",
-                len(still_missing),
-            )
 
     # Query S3 and generate fixes
     s3_client = get_s3_client()
-    fixes = []  # list of (annex_rmet_path, rmet_content)
+    fixes = []
     fixed = 0
     errors = 0
     skipped_no_path = 0
     skipped_no_size = 0
 
-    for key, log_path, log_entries in missing_keys:
+    for key, log_path, log_entries, existing_rmet in missing_keys:
         if limit and fixed >= limit:
             break
 
@@ -665,42 +673,119 @@ def fix_missing_s3_urls(ctx, remote, dry_run, limit):
             continue
 
         rmet_timestamp = increment_timestamp(remote_entry["timestamp"])
-        rmet_content = format_rmet_line(
+        new_rmet_line = format_rmet_line(
             rmet_timestamp, remote_uuid, version_id, s3_key,
         )
 
-        # The .rmet path is the .log path + ".rmet" stripped back:
-        # Actually: the .log path is like aaa/bbb/KEY.log
-        # The .rmet path is aaa/bbb/KEY.log.rmet
         rmet_path = log_path + ".rmet"
+        # Append to existing rmet content if any
+        rmet_content = existing_rmet.rstrip("\n")
+        if rmet_content:
+            rmet_content += "\n"
+        rmet_content += new_rmet_line
 
         if dry_run:
-            click.echo(f"WOULD FIX: {filepath}")
-            click.echo(f"  key: {key}")
-            click.echo(f"  S3 versionId: {version_id}")
-            click.echo(f"  rmet path: {rmet_path}")
-            click.echo(f"  rmet content: {rmet_content.strip()}")
+            click.echo(f"  WOULD FIX: {filepath}")
+            click.echo(f"    key: {key}")
+            click.echo(f"    S3 versionId: {version_id}")
+            click.echo(f"    rmet content: {new_rmet_line.strip()}")
         else:
             fixes.append((rmet_path, rmet_content))
 
         fixed += 1
 
-    if not dry_run and fixes:
-        _apply_fixes_to_annex_branch(repo, fixes)
-        click.echo(f"Applied {len(fixes)} fixes to git-annex branch", err=True)
+    stats = {
+        "total": len(missing_keys),
+        "fixed": fixed,
+        "errors": errors,
+        "skipped_no_path": skipped_no_path,
+        "skipped_no_size": skipped_no_size,
+    }
+    return fixes, stats
 
-    click.echo(f"\nSummary:", err=True)
-    click.echo(f"  {len(missing_keys)} keys on '{remote}' missing .log.rmet", err=True)
-    click.echo(f"  {fixed} {'would be fixed' if dry_run else 'fixed'}", err=True)
-    if skipped_no_path:
-        click.echo(f"  {skipped_no_path} skipped (not in current tree)", err=True)
-    if skipped_no_size:
-        click.echo(f"  {skipped_no_size} skipped (no size in key name)", err=True)
-    if errors:
-        click.echo(f"  {errors} errors (S3 query failures / no matching version)", err=True)
-    remaining = len(missing_keys) - fixed - skipped_no_path - skipped_no_size - errors
-    if limit and remaining > 0:
-        click.echo(f"  {remaining} not attempted (--limit {limit})", err=True)
+
+@cli.command("fix-missing-s3-urls")
+@click.option(
+    "--remote", default="s3-PUBLIC",
+    help="S3 remote name (default: s3-PUBLIC)",
+)
+@click.option(
+    "--all-s3-remotes", is_flag=True,
+    help="Fix all versioned S3 remotes (skips private ones without credentials)",
+)
+@click.option(
+    "--dry-run/--apply", default=True,
+    help="Dry run (default) or apply changes to git-annex branch",
+)
+@click.option(
+    "--limit", type=int, default=0,
+    help="Limit number of keys to fix per remote (0=all)",
+)
+@click.pass_context
+def fix_missing_s3_urls(ctx, remote, all_s3_remotes, dry_run, limit):
+    """Fix keys missing .log.rmet by querying S3 for version IDs."""
+    repo = ctx.obj["repo"]
+
+    # Parse remote.log
+    remote_log = git_show("git-annex:remote.log", cwd=repo)
+    remotes = parse_remote_log(remote_log)
+
+    # Determine which remotes to fix
+    if all_s3_remotes:
+        targets = find_all_versioned_s3_remotes(remotes)
+        if not targets:
+            click.echo("ERROR: No versioned S3 remotes found", err=True)
+            sys.exit(1)
+        click.echo(
+            f"Found {len(targets)} versioned S3 remote(s): "
+            + ", ".join(a.get("name", u) for u, a in targets),
+            err=True,
+        )
+    else:
+        s3_info = find_s3_remote(remotes, remote)
+        if s3_info is None:
+            click.echo(f"ERROR: Remote '{remote}' not found", err=True)
+            sys.exit(1)
+        targets = [s3_info]
+
+    # Parse git-annex branch structure (shared across remotes)
+    entries = git_ls_tree_annex(cwd=repo)
+    groups = group_annex_keys(entries)
+
+    # Build key -> filepath mapping (shared)
+    key_to_filepath = _build_key_filepath_map(repo)
+
+    all_fixes = []
+    for remote_uuid, remote_attrs in targets:
+        remote_name = remote_attrs.get("name", remote_uuid)
+        fixes, stats = _fix_remote(
+            repo, remote_name, remote_uuid, remote_attrs,
+            groups, key_to_filepath, dry_run, limit,
+        )
+        all_fixes.extend(fixes)
+
+        if stats.get("skipped_private"):
+            continue
+
+        # Print per-remote summary
+        total = stats.get("total", 0)
+        fixed = stats.get("fixed", 0)
+        click.echo(f"  Summary for {remote_name}:", err=True)
+        click.echo(f"    {total} keys missing .log.rmet", err=True)
+        click.echo(f"    {fixed} {'would be fixed' if dry_run else 'fixed'}", err=True)
+        if stats.get("skipped_no_path"):
+            click.echo(f"    {stats['skipped_no_path']} skipped (not in current tree)", err=True)
+        if stats.get("skipped_no_size"):
+            click.echo(f"    {stats['skipped_no_size']} skipped (no size in key name)", err=True)
+        if stats.get("errors"):
+            click.echo(f"    {stats['errors']} errors", err=True)
+        remaining = total - fixed - stats.get("skipped_no_path", 0) - stats.get("skipped_no_size", 0) - stats.get("errors", 0)
+        if limit and remaining > 0:
+            click.echo(f"    {remaining} not attempted (--limit {limit})", err=True)
+
+    if not dry_run and all_fixes:
+        _apply_fixes_to_annex_branch(repo, all_fixes)
+        click.echo(f"\nApplied {len(all_fixes)} fixes to git-annex branch", err=True)
 
 
 def _build_key_filepath_map(repo: str) -> dict[str, str]:

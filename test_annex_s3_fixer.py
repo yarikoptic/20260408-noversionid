@@ -272,45 +272,38 @@ class TestGroupAnnexKeys:
         assert not any("uuid.log" in k for k in groups)
 
 
-# -- Integration tests (require ds000113 clone) --
+# -- Integration tests (clone ds000113 fresh from GitHub) --
 
 
-def _have_dataset(name: str) -> bool:
-    """Check if a dataset clone exists alongside this repo."""
-    # Check common locations
-    for base in [
-        os.path.dirname(os.path.abspath(__file__)),
-        "/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid",
-    ]:
-        path = os.path.join(base, name)
-        if os.path.isdir(os.path.join(path, ".git")):
-            return True
-    return False
+DS000113_URL = "https://github.com/OpenNeuroDatasets/ds000113.git"
 
 
-def _dataset_path(name: str) -> str:
-    for base in [
-        os.path.dirname(os.path.abspath(__file__)),
-        "/mnt/btrfs/datasets/datalad/tmp/20260408-noversionid",
-    ]:
-        path = os.path.join(base, name)
-        if os.path.isdir(os.path.join(path, ".git")):
-            return path
-    raise FileNotFoundError(f"Dataset {name} not found")
+@pytest.fixture(scope="module")
+def ds000113_clone(tmp_path_factory):
+    """Clone ds000113 fresh from GitHub for integration testing.
+
+    Module-scoped so it's shared across all integration tests (one clone).
+    """
+    dest = str(tmp_path_factory.mktemp("ds000113"))
+    subprocess.run(
+        ["git", "clone", "--depth=1", DS000113_URL, dest],
+        check=True, capture_output=True, text=True,
+    )
+    subprocess.run(
+        ["git", "fetch", "origin", "git-annex:git-annex"],
+        check=True, capture_output=True, text=True, cwd=dest,
+    )
+    return dest
 
 
 @pytest.mark.ai_generated
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not _have_dataset("ds000113"),
-    reason="ds000113 clone not available",
-)
 class TestIntegrationDs000113:
-    """Integration tests against a real ds000113 clone."""
+    """Integration tests against a fresh ds000113 clone from GitHub."""
 
     @pytest.fixture
-    def repo(self):
-        return _dataset_path("ds000113")
+    def repo(self, ds000113_clone):
+        return ds000113_clone
 
     def test_remote_log_has_s3_public(self, repo):
         content = subprocess.run(
@@ -325,28 +318,36 @@ class TestIntegrationDs000113:
         assert "ds000113" in attrs.get("fileprefix", "")
 
     def test_find_keys_without_rmet(self, repo):
-        """find-keys-without-urls should run successfully."""
+        """Fresh clone should have keys on s3-PUBLIC missing .log.rmet."""
         from click.testing import CliRunner
         from annex_s3_fixer import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["-C", repo, "find-keys-without-urls"])
         assert result.exit_code == 0
-        # Should report a count (may be 0 if already fixed, or >0 if not)
-        assert "keys missing URL metadata" in result.output
+        lines = [l for l in result.output.strip().splitlines() if l and not l.startswith("\n")]
+        assert len(lines) > 0, "Expected to find keys without URLs"
+        assert any(
+            "MD5E-s161017800--e3d1a133a2b66ddc0bfbb6941fa7ef14" in l
+            for l in lines
+        ), f"Expected known bad key in output, got: {lines[:5]}"
 
     def test_find_files_without_urls(self, repo):
-        """find-files-without-urls should run successfully."""
+        """Fresh clone should have files on s3-PUBLIC without URLs."""
         from click.testing import CliRunner
         from annex_s3_fixer import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["-C", repo, "find-files-without-urls"])
         assert result.exit_code == 0
-        assert "files without URLs" in result.output
+        lines = [l for l in result.output.strip().splitlines() if l]
+        assert any(
+            "sub-01_ses-auditoryperception_task-auditoryperception_run-01_bold" in l
+            for l in lines
+        ), f"Expected known bad file in output, got: {lines[:5]}"
 
     def test_fix_dry_run(self, repo):
-        """Dry run should complete successfully."""
+        """Dry run should propose fixes."""
         from click.testing import CliRunner
         from annex_s3_fixer import cli
 
@@ -355,16 +356,27 @@ class TestIntegrationDs000113:
             cli, ["-C", repo, "fix-missing-s3-urls", "--dry-run", "--limit", "2"],
         )
         assert result.exit_code == 0
-        # Output contains either "WOULD FIX" (unfixed) or "0 keys needing fix" (already fixed)
-        assert "WOULD FIX" in result.output or "0 keys needing fix" in result.output
+        assert "WOULD FIX" in result.output
+
+    def test_all_s3_remotes_dry_run(self, repo):
+        """--all-s3-remotes should detect both s3-PUBLIC and s3-PRIVATE."""
+        from click.testing import CliRunner
+        from annex_s3_fixer import cli
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["-C", repo, "fix-missing-s3-urls",
+                  "--all-s3-remotes", "--dry-run", "--limit", "2"],
+        )
+        assert result.exit_code == 0
+        # Should mention s3-PRIVATE being skipped (public=no)
+        assert "Skipping" in result.output and "s3-PRIVATE" in result.output
+        # Should still fix s3-PUBLIC keys
+        assert "WOULD FIX" in result.output
 
 
 @pytest.mark.ai_generated
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not _have_dataset("ds000113"),
-    reason="ds000113 clone not available",
-)
 class TestEndToEndFix:
     """End-to-end test: apply fix then verify git annex get works."""
 
@@ -373,66 +385,23 @@ class TestEndToEndFix:
     TEST_KEY = "MD5E-s1733--997ecb86e29576f604716c420d05f803.nii.gz"
     TEST_SIZE = 1733
 
-    # The .log.rmet path for the test key on the git-annex branch
-    TEST_RMET_PATH = "000/630/MD5E-s1733--997ecb86e29576f604716c420d05f803.nii.gz.log.rmet"
-
     @pytest.fixture
     def disposable_clone(self, tmp_path):
-        """Create a disposable clone of ds000113 with the test key's rmet removed.
-
-        This simulates the broken state regardless of whether the source
-        repo has already been fixed.
-        """
-        src = _dataset_path("ds000113")
+        """Clone ds000113 fresh from GitHub — guaranteed broken state."""
         dest = str(tmp_path / "ds000113")
-        # Local clone
         subprocess.run(
-            ["git", "clone", src, dest],
+            ["git", "clone", "--depth=1", DS000113_URL, dest],
             check=True, capture_output=True, text=True,
         )
-        # Bring in the git-annex branch
         subprocess.run(
             ["git", "fetch", "origin", "git-annex:git-annex"],
             check=True, capture_output=True, text=True, cwd=dest,
         )
-
-        # Remove the .log.rmet for the test key to simulate broken state.
-        # Use git plumbing to modify the git-annex branch without a worktree.
-        env = os.environ.copy()
-        index_file = os.path.join(dest, ".git", "tmp-index-test")
-        env["GIT_INDEX_FILE"] = index_file
-        try:
-            subprocess.run(
-                ["git", "read-tree", "git-annex"],
-                check=True, capture_output=True, cwd=dest, env=env,
-            )
-            subprocess.run(
-                ["git", "rm", "--cached", "-f", "--ignore-unmatch",
-                 self.TEST_RMET_PATH],
-                check=True, capture_output=True, cwd=dest, env=env,
-            )
-            tree = subprocess.run(
-                ["git", "write-tree"],
-                check=True, capture_output=True, text=True, cwd=dest, env=env,
-            ).stdout.strip()
-            parent = subprocess.run(
-                ["git", "rev-parse", "git-annex"],
-                check=True, capture_output=True, text=True, cwd=dest,
-            ).stdout.strip()
-            commit = subprocess.run(
-                ["git", "commit-tree", tree, "-p", parent,
-                 "-m", "test: remove rmet to simulate broken state"],
-                check=True, capture_output=True, text=True, cwd=dest,
-            ).stdout.strip()
-            subprocess.run(
-                ["git", "update-ref", "refs/heads/git-annex", commit],
-                check=True, capture_output=True, cwd=dest,
-            )
-        finally:
-            if os.path.exists(index_file):
-                os.unlink(index_file)
-
-        # Init annex
+        # Unshallow so git cat-file works for SHA1 keys
+        subprocess.run(
+            ["git", "fetch", "--unshallow"],
+            capture_output=True, text=True, cwd=dest,
+        )
         subprocess.run(
             ["git", "annex", "init", "test-disposable"],
             check=True, capture_output=True, text=True, cwd=dest,
