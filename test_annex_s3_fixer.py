@@ -283,14 +283,17 @@ def ds000113_clone(tmp_path_factory):
     """Clone ds000113 fresh from GitHub for integration testing.
 
     Module-scoped so it's shared across all integration tests (one clone).
+    Uses full clone (not --depth=1) so git-annex branch is properly fetched,
+    then `git annex init` merges it via git-annex's own machinery.
     """
     dest = str(tmp_path_factory.mktemp("ds000113"))
     subprocess.run(
-        ["git", "clone", "--depth=1", DS000113_URL, dest],
+        ["git", "clone", DS000113_URL, dest],
         check=True, capture_output=True, text=True,
     )
+    # git annex init properly fetches and merges origin/git-annex
     subprocess.run(
-        ["git", "fetch", "origin", "git-annex:git-annex"],
+        ["git", "annex", "init", "test-integration"],
         check=True, capture_output=True, text=True, cwd=dest,
     )
     return dest
@@ -390,17 +393,8 @@ class TestEndToEndFix:
         """Clone ds000113 fresh from GitHub — guaranteed broken state."""
         dest = str(tmp_path / "ds000113")
         subprocess.run(
-            ["git", "clone", "--depth=1", DS000113_URL, dest],
+            ["git", "clone", DS000113_URL, dest],
             check=True, capture_output=True, text=True,
-        )
-        subprocess.run(
-            ["git", "fetch", "origin", "git-annex:git-annex"],
-            check=True, capture_output=True, text=True, cwd=dest,
-        )
-        # Unshallow so git cat-file works for SHA1 keys
-        subprocess.run(
-            ["git", "fetch", "--unshallow"],
-            capture_output=True, text=True, cwd=dest,
         )
         subprocess.run(
             ["git", "annex", "init", "test-disposable"],
