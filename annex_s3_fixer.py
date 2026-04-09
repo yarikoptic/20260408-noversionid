@@ -569,6 +569,25 @@ def fix_missing_s3_urls(ctx, remote, dry_run, limit):
     # Build key -> filepath mapping from current tree
     key_to_filepath = _build_key_filepath_map(repo)
 
+    # Identify keys not in current tree for export tree lookup
+    all_missing_key_names = {k for k, _, _ in missing_keys}
+    keys_not_in_tree = all_missing_key_names - set(key_to_filepath)
+    if keys_not_in_tree:
+        lgr.info(
+            "%d keys not in current tree, searching export trees...",
+            len(keys_not_in_tree),
+        )
+        export_map = _build_key_filepath_map_from_export_trees(
+            repo, remote_uuid, keys_not_in_tree,
+        )
+        key_to_filepath.update(export_map)
+        still_missing = keys_not_in_tree - set(export_map)
+        if still_missing:
+            lgr.info(
+                "%d keys not found in export trees either",
+                len(still_missing),
+            )
+
     # Query S3 and generate fixes
     s3_client = get_s3_client()
     fixes = []  # list of (annex_rmet_path, rmet_content)
@@ -583,13 +602,13 @@ def fix_missing_s3_urls(ctx, remote, dry_run, limit):
 
         filepath = key_to_filepath.get(key)
         if filepath is None:
-            lgr.warning("Key %s not in current tree, skipping (historical lookup not yet implemented)", key)
+            lgr.warning("Key %s: not found in current tree or export trees", key)
             skipped_no_path += 1
             continue
 
-        size = extract_size_from_key(key)
+        size = get_size_for_key(key, repo)
         if size is None:
-            lgr.warning("Cannot extract size from key %s, no size in key name", key)
+            lgr.warning("Cannot determine size for key %s", key)
             skipped_no_size += 1
             continue
 
@@ -729,6 +748,130 @@ def _build_key_filepath_map_from_symlinks(repo: str) -> dict[str, str]:
             key = os.path.basename(target)
             key_to_filepath[key] = filepath
     return key_to_filepath
+
+
+def parse_export_log(content: str, remote_uuid: str) -> list[str]:
+    """Parse git-annex export.log to find exported tree hashes for a remote.
+
+    export.log lines look like:
+      <ts> <db_uuid>:<remote_uuid> <tree1> [<tree2>]
+
+    Returns list of tree hashes that were exported to the given remote,
+    most recent first.
+    """
+    trees = []
+    for line in content.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        # parts[1] is like "db_uuid:remote_uuid"
+        uuids = parts[1]
+        if remote_uuid in uuids:
+            # Tree hashes are the remaining parts (there can be 1 or 2)
+            for tree_hash in parts[2:]:
+                if tree_hash not in trees:
+                    trees.append(tree_hash)
+    # Return in reverse order so most recent is first
+    return list(reversed(trees))
+
+
+def _build_key_filepath_map_from_export_trees(
+    repo: str, remote_uuid: str, keys_needed: set[str],
+) -> dict[str, str]:
+    """Find file paths for keys by searching the exported tree(s).
+
+    For SHA1 keys, the blob hash in the tree IS the key hash.
+    For other keys (MD5E, etc.), the tree entry is a symlink blob
+    whose content points to the annex object path containing the key name.
+
+    Returns {key: filepath} for keys that were found.
+    """
+    try:
+        export_log = git_show("git-annex:export.log", cwd=repo)
+    except subprocess.CalledProcessError:
+        lgr.debug("No export.log found")
+        return {}
+
+    trees = parse_export_log(export_log, remote_uuid)
+    if not trees:
+        lgr.debug("No exported trees found for remote %s", remote_uuid)
+        return {}
+
+    # Build lookup sets for faster matching
+    # SHA1 keys: the hash part IS the blob hash
+    sha1_hash_to_key = {}
+    other_keys = set()
+    for key in keys_needed:
+        if key.startswith("SHA1--"):
+            blob_hash = key[6:]  # strip "SHA1--"
+            sha1_hash_to_key[blob_hash] = key
+        else:
+            other_keys.add(key)
+
+    key_to_filepath: dict[str, str] = {}
+
+    for tree_hash in trees:
+        if not keys_needed - set(key_to_filepath):
+            break  # all found
+
+        try:
+            output = git_run(["ls-tree", "-r", tree_hash], cwd=repo)
+        except subprocess.CalledProcessError:
+            lgr.warning("Cannot read tree %s", tree_hash)
+            continue
+
+        for line in output.strip().splitlines():
+            if not line:
+                continue
+            meta, filepath = line.split("\t", 1)
+            parts = meta.split()
+            blob_hash = parts[2]
+
+            # Check SHA1 keys: blob hash matches key hash
+            if blob_hash in sha1_hash_to_key:
+                key = sha1_hash_to_key[blob_hash]
+                if key not in key_to_filepath:
+                    key_to_filepath[key] = filepath
+                    lgr.debug("Found %s -> %s (via export tree blob hash)", key, filepath)
+
+            # Check other keys: read symlink content to find key name
+            if other_keys and parts[0] == "120000":  # symlink
+                try:
+                    symlink_target = git_run(["cat-file", "-p", blob_hash], cwd=repo).strip()
+                    target_key = os.path.basename(symlink_target)
+                    if target_key in other_keys and target_key not in key_to_filepath:
+                        key_to_filepath[target_key] = filepath
+                        lgr.debug("Found %s -> %s (via export tree symlink)", target_key, filepath)
+                except subprocess.CalledProcessError:
+                    pass
+
+    return key_to_filepath
+
+
+def get_size_for_key(key: str, repo: str) -> int | None:
+    """Get the size for a git-annex key.
+
+    First tries extracting from the key name (MD5E-s<SIZE>--, etc.).
+    For SHA1 keys without encoded size, falls back to git cat-file -s
+    using the blob hash.
+    """
+    size = extract_size_from_key(key)
+    if size is not None:
+        return size
+
+    # For SHA1 keys, the key IS the blob hash
+    if key.startswith("SHA1--"):
+        blob_hash = key[6:]
+        try:
+            output = git_run(["cat-file", "-s", blob_hash], cwd=repo)
+            return int(output.strip())
+        except (subprocess.CalledProcessError, ValueError):
+            pass
+
+    return None
 
 
 def _apply_fixes_to_annex_branch(repo: str, fixes: list[tuple[str, str]]) -> None:

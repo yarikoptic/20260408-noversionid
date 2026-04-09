@@ -16,6 +16,7 @@ from annex_s3_fixer import (
     group_annex_keys,
     increment_timestamp,
     key_stem,
+    parse_export_log,
     parse_log_file,
     parse_remote_log,
     parse_rmet_file,
@@ -208,6 +209,35 @@ class TestFormatRmetLine:
             ":V +TxSZbdFLyz5ATEWs0m9vRFQIozJO7owr"
             "#ds000113/some/file.nii.gz\n"
         )
+
+
+class TestParseExportLog:
+    SAMPLE = textwrap.dedent("""\
+        1534885655.499159794s b8b60a40-f339-4ddc-b08a-2a6f645bd3ef:66a7004d-a15e-4764-90cd-54bbd179f74a c85a1ab87ddbb6422e8e878ed5bae5bcf396692a
+        1592541184.985931609s b8b60a40-f339-4ddc-b08a-2a6f645bd3ef:e28d70a7-9314-4542-a4ce-7d95b862070f c85a1ab87ddbb6422e8e878ed5bae5bcf396692a 71f1469f4b43994892b0cec09d926439c5e0b91a
+    """)
+
+    def test_find_trees_for_s3_public(self):
+        trees = parse_export_log(
+            self.SAMPLE, "e28d70a7-9314-4542-a4ce-7d95b862070f"
+        )
+        # Most recent first
+        assert trees == [
+            "71f1469f4b43994892b0cec09d926439c5e0b91a",
+            "c85a1ab87ddbb6422e8e878ed5bae5bcf396692a",
+        ]
+
+    def test_find_trees_for_s3_private(self):
+        trees = parse_export_log(
+            self.SAMPLE, "66a7004d-a15e-4764-90cd-54bbd179f74a"
+        )
+        assert trees == ["c85a1ab87ddbb6422e8e878ed5bae5bcf396692a"]
+
+    def test_nonexistent_remote(self):
+        assert parse_export_log(self.SAMPLE, "nonexistent") == []
+
+    def test_empty(self):
+        assert parse_export_log("", "anything") == []
 
 
 class TestGroupAnnexKeys:
