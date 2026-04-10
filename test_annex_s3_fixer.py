@@ -128,6 +128,7 @@ class TestExtractSizeFromKey:
 
 class TestExtractChecksumFromKey:
     def test_md5e(self):
+        # E-variant: pure hash, git_style=False
         result = extract_checksum_from_key(
             "MD5E-s186016172--b905bd144175d465b60ba9a14d229d9e.nii.gz"
         )
@@ -140,6 +141,7 @@ class TestExtractChecksumFromKey:
         assert result == ("md5", "eb58560408b3bca63a5673cd470972fa")
 
     def test_sha1(self):
+        # Non-E: git hash-object style, git_style=True
         result = extract_checksum_from_key(
             "SHA1--cd3b8d583a83d14c97228f0b46e65b7c766e3fad"
         )

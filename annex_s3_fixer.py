@@ -125,11 +125,12 @@ def extract_checksum_from_key(key: str) -> tuple[str, str] | None:
       SHA256E-s12345--abc123def456.txt
         -> ("sha256", "abc123def456")
 
-    The hash type is the prefix (MD5, MD5E, SHA1, SHA256, SHA256E, etc.).
-    'E' suffix means extension is preserved in the key name but the checksum
-    is computed on the content without the extension.
-    The checksum follows '--'.
-    For 'E' variants, the checksum ends where the first '.' of the extension starts.
+    Returns (hash_type, checksum) or None.
+
+    All backends compute a pure hash of the file content.
+    E-variants (MD5E, SHA256E) preserve the file extension in the key name;
+    the checksum is the part between '--' and the first '.'.
+    Non-E variants have no extension, the checksum is everything after '--'.
     """
     # Split on '--' to get the checksum part
     parts = key.split("--", 1)
@@ -306,6 +307,22 @@ def match_version_by_size(
     return [v for v in versions if v["Size"] == target_size]
 
 
+def _compute_checksums(data: bytes, hash_name: str) -> list[str]:
+    """Compute both pure and git-style checksums of data.
+
+    Returns [pure_hash, git_style_hash]. git-annex E-variants use pure
+    hashes, non-E variants use git hash-object format (hash of
+    "blob <size>\\0" + content).
+    """
+    pure = hashlib.new(hash_name, data).hexdigest()
+    header = f"blob {len(data)}\0".encode()
+    h = hashlib.new(hash_name)
+    h.update(header)
+    h.update(data)
+    git_style = h.hexdigest()
+    return [pure, git_style]
+
+
 def match_version_by_checksum(
     s3_client,
     bucket: str,
@@ -314,10 +331,13 @@ def match_version_by_checksum(
     hash_type: str,
     expected_checksum: str,
 ) -> dict | None:
-    """Disambiguate multiple S3 version candidates by downloading and checksumming.
+    """Find the S3 version matching the expected checksum by downloading.
 
-    Only supports md5 and sha1/sha256/sha512 hash types.
-    Downloads each candidate version and computes the checksum to find a match.
+    Downloads each candidate version, computes checksums (both pure hash
+    and git hash-object format), and compares against the expected checksum.
+    Tries both because E-variants use pure hashes while non-E variants use
+    git-style hashes.
+
     Returns the matching version dict, or None.
     """
     hash_name_map = {
@@ -343,17 +363,15 @@ def match_version_by_checksum(
             response = s3_client.get_object(
                 Bucket=bucket, Key=s3_key, VersionId=version_id,
             )
-            h = hashlib.new(hash_name)
-            for chunk in response["Body"].iter_chunks(1024 * 1024):
-                h.update(chunk)
-            computed = h.hexdigest()
-            if computed == expected_checksum:
+            data = response["Body"].read()
+            checksums = _compute_checksums(data, hash_name)
+            if expected_checksum in checksums:
                 lgr.info("Checksum match for version %s", version_id)
                 return candidate
             else:
                 lgr.debug(
-                    "Version %s checksum %s != expected %s",
-                    version_id, computed, expected_checksum,
+                    "Version %s checksums %s — none match expected %s",
+                    version_id, checksums, expected_checksum,
                 )
         except Exception as e:
             lgr.warning("Failed to download version %s: %s", version_id, e)
@@ -602,7 +620,6 @@ def _fix_remote(
     fixed = 0
     errors = 0
     skipped_no_path = 0
-    skipped_no_size = 0
 
     for key, log_path, log_entries, existing_rmet in missing_keys:
         if limit and fixed >= limit:
@@ -614,12 +631,7 @@ def _fix_remote(
             skipped_no_path += 1
             continue
 
-        size = get_size_for_key(key, repo)
-        if size is None:
-            lgr.warning("Cannot determine size for key %s", key)
-            skipped_no_size += 1
-            continue
-
+        size = extract_size_from_key(key)
         s3_key = fileprefix + filepath
         lgr.debug("Querying S3: bucket=%s key=%s", bucket, s3_key)
 
@@ -630,37 +642,64 @@ def _fix_remote(
             errors += 1
             continue
 
-        matches = match_version_by_size(versions, size)
-
-        if len(matches) == 0:
-            lgr.warning(
-                "No S3 version matches size %d for %s (%d versions found)",
-                size, filepath, len(versions),
-            )
-            errors += 1
-            continue
-        elif len(matches) > 1:
-            lgr.warning(
-                "Multiple S3 versions match size %d for %s: %s — attempting checksum disambiguation",
-                size, filepath,
-                [v["VersionId"] for v in matches],
-            )
+        if size is not None:
+            # Size known from key name — filter by size first
+            matches = match_version_by_size(versions, size)
+            if len(matches) == 0:
+                lgr.warning(
+                    "No S3 version matches size %d for %s (%d versions found)",
+                    size, filepath, len(versions),
+                )
+                errors += 1
+                continue
+            elif len(matches) == 1:
+                version_id = matches[0]["VersionId"]
+            else:
+                # Multiple size matches — disambiguate by checksum
+                lgr.info(
+                    "Multiple S3 versions match size %d for %s — verifying by checksum",
+                    size, filepath,
+                )
+                checksum_info = extract_checksum_from_key(key)
+                if checksum_info is None:
+                    lgr.warning("Cannot extract checksum from key %s", key)
+                    errors += 1
+                    continue
+                hash_type, expected_checksum = checksum_info
+                winner = match_version_by_checksum(
+                    s3_client, bucket, s3_key, matches,
+                    hash_type, expected_checksum,
+                )
+                if winner is None:
+                    lgr.warning("No version matched checksum for %s", filepath)
+                    errors += 1
+                    continue
+                version_id = winner["VersionId"]
+        else:
+            # No size in key — must verify every version by checksum
+            if not versions:
+                lgr.warning("No S3 versions found for %s", filepath)
+                errors += 1
+                continue
             checksum_info = extract_checksum_from_key(key)
             if checksum_info is None:
-                lgr.warning("Cannot extract checksum from key %s, cannot disambiguate", key)
+                lgr.warning("Cannot extract checksum from key %s", key)
                 errors += 1
                 continue
             hash_type, expected_checksum = checksum_info
+            lgr.info(
+                "No size in key %s — downloading %d version(s) of %s to verify by %s checksum",
+                key, len(versions), filepath, hash_type,
+            )
             winner = match_version_by_checksum(
-                s3_client, bucket, s3_key, matches, hash_type, expected_checksum,
+                s3_client, bucket, s3_key, versions,
+                hash_type, expected_checksum,
             )
             if winner is None:
-                lgr.warning("No version matched checksum for %s", filepath)
+                lgr.warning("No version matched %s checksum for %s", hash_type, filepath)
                 errors += 1
                 continue
-            matches = [winner]
-
-        version_id = matches[0]["VersionId"]
+            version_id = winner["VersionId"]
 
         # Find timestamp from .log for this remote, add 1 second
         remote_entry = next(
@@ -699,7 +738,6 @@ def _fix_remote(
         "fixed": fixed,
         "errors": errors,
         "skipped_no_path": skipped_no_path,
-        "skipped_no_size": skipped_no_size,
     }
     return fixes, stats
 
@@ -775,11 +813,9 @@ def fix_missing_s3_urls(ctx, remote, all_s3_remotes, dry_run, limit):
         click.echo(f"    {fixed} {'would be fixed' if dry_run else 'fixed'}", err=True)
         if stats.get("skipped_no_path"):
             click.echo(f"    {stats['skipped_no_path']} skipped (not in current tree)", err=True)
-        if stats.get("skipped_no_size"):
-            click.echo(f"    {stats['skipped_no_size']} skipped (no size in key name)", err=True)
         if stats.get("errors"):
             click.echo(f"    {stats['errors']} errors", err=True)
-        remaining = total - fixed - stats.get("skipped_no_path", 0) - stats.get("skipped_no_size", 0) - stats.get("errors", 0)
+        remaining = total - fixed - stats.get("skipped_no_path", 0) - stats.get("errors", 0)
         if limit and remaining > 0:
             click.echo(f"    {remaining} not attempted (--limit {limit})", err=True)
 
@@ -935,28 +971,6 @@ def _build_key_filepath_map_from_export_trees(
 
     return key_to_filepath
 
-
-def get_size_for_key(key: str, repo: str) -> int | None:
-    """Get the size for a git-annex key.
-
-    First tries extracting from the key name (MD5E-s<SIZE>--, etc.).
-    For SHA1 keys without encoded size, falls back to git cat-file -s
-    using the blob hash.
-    """
-    size = extract_size_from_key(key)
-    if size is not None:
-        return size
-
-    # For SHA1 keys, the key IS the blob hash
-    if key.startswith("SHA1--"):
-        blob_hash = key[6:]
-        try:
-            output = git_run(["cat-file", "-s", blob_hash], cwd=repo)
-            return int(output.strip())
-        except (subprocess.CalledProcessError, ValueError):
-            pass
-
-    return None
 
 
 def _apply_fixes_to_annex_branch(repo: str, fixes: list[tuple[str, str]]) -> None:
