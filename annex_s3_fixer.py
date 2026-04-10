@@ -618,7 +618,7 @@ def _fix_remote(
     s3_client = get_s3_client()
     fixes = []
     fixed = 0
-    errors = 0
+    failed_keys = []  # keys where we couldn't find matching S3 content
     skipped_no_path = 0
 
     for key, log_path, log_entries, existing_rmet in missing_keys:
@@ -639,7 +639,7 @@ def _fix_remote(
             versions = list_s3_versions(s3_client, bucket, s3_key)
         except Exception as e:
             lgr.warning("S3 query failed for %s: %s", s3_key, e)
-            errors += 1
+            failed_keys.append(key)
             continue
 
         if size is not None:
@@ -650,7 +650,7 @@ def _fix_remote(
                     "No S3 version matches size %d for %s (%d versions found)",
                     size, filepath, len(versions),
                 )
-                errors += 1
+                failed_keys.append(key)
                 continue
             elif len(matches) == 1:
                 version_id = matches[0]["VersionId"]
@@ -663,7 +663,7 @@ def _fix_remote(
                 checksum_info = extract_checksum_from_key(key)
                 if checksum_info is None:
                     lgr.warning("Cannot extract checksum from key %s", key)
-                    errors += 1
+                    failed_keys.append(key)
                     continue
                 hash_type, expected_checksum = checksum_info
                 winner = match_version_by_checksum(
@@ -672,19 +672,19 @@ def _fix_remote(
                 )
                 if winner is None:
                     lgr.warning("No version matched checksum for %s", filepath)
-                    errors += 1
+                    failed_keys.append(key)
                     continue
                 version_id = winner["VersionId"]
         else:
             # No size in key — must verify every version by checksum
             if not versions:
                 lgr.warning("No S3 versions found for %s", filepath)
-                errors += 1
+                failed_keys.append(key)
                 continue
             checksum_info = extract_checksum_from_key(key)
             if checksum_info is None:
                 lgr.warning("Cannot extract checksum from key %s", key)
-                errors += 1
+                failed_keys.append(key)
                 continue
             hash_type, expected_checksum = checksum_info
             lgr.info(
@@ -697,7 +697,7 @@ def _fix_remote(
             )
             if winner is None:
                 lgr.warning("No version matched %s checksum for %s", hash_type, filepath)
-                errors += 1
+                failed_keys.append(key)
                 continue
             version_id = winner["VersionId"]
 
@@ -708,7 +708,7 @@ def _fix_remote(
         )
         if remote_entry is None:
             lgr.warning("No log entry for remote %s in %s", remote_uuid, log_path)
-            errors += 1
+            failed_keys.append(key)
             continue
 
         rmet_timestamp = increment_timestamp(remote_entry["timestamp"])
@@ -733,11 +733,23 @@ def _fix_remote(
 
         fixed += 1
 
+    # Classify failed keys by reachability
+    unfixable = {"current": [], "tagged": [], "historical": [], "orphan": []}
+    if failed_keys:
+        click.echo(
+            f"  Classifying {len(failed_keys)} unfixable key(s) by reachability...",
+            err=True,
+        )
+        reachability = build_reachability_map(repo, set(failed_keys))
+        for key in failed_keys:
+            category = reachability.get(key, "orphan")
+            unfixable[category].append(key)
+
     stats = {
         "total": len(missing_keys),
         "fixed": fixed,
-        "errors": errors,
         "skipped_no_path": skipped_no_path,
+        "unfixable": unfixable,
     }
     return fixes, stats
 
@@ -794,6 +806,7 @@ def fix_missing_s3_urls(ctx, remote, all_s3_remotes, dry_run, limit):
     key_to_filepath = _build_key_filepath_map(repo)
 
     all_fixes = []
+    has_errors = False
     for remote_uuid, remote_attrs in targets:
         remote_name = remote_attrs.get("name", remote_uuid)
         fixes, stats = _fix_remote(
@@ -808,20 +821,47 @@ def fix_missing_s3_urls(ctx, remote, all_s3_remotes, dry_run, limit):
         # Print per-remote summary
         total = stats.get("total", 0)
         fixed = stats.get("fixed", 0)
+        unfixable = stats.get("unfixable", {})
+        n_unfixable = sum(len(v) for v in unfixable.values())
+
         click.echo(f"  Summary for {remote_name}:", err=True)
         click.echo(f"    {total} keys missing .log.rmet", err=True)
         click.echo(f"    {fixed} {'would be fixed' if dry_run else 'fixed'}", err=True)
         if stats.get("skipped_no_path"):
-            click.echo(f"    {stats['skipped_no_path']} skipped (not in current tree)", err=True)
-        if stats.get("errors"):
-            click.echo(f"    {stats['errors']} errors", err=True)
-        remaining = total - fixed - stats.get("skipped_no_path", 0) - stats.get("errors", 0)
+            click.echo(f"    {stats['skipped_no_path']} skipped (path not found)", err=True)
+        if unfixable.get("current"):
+            click.echo(
+                f"    {len(unfixable['current'])} unfixable in current tree — ERROR",
+                err=True,
+            )
+        if unfixable.get("tagged"):
+            click.echo(
+                f"    {len(unfixable['tagged'])} unfixable in tagged release(s) — ERROR",
+                err=True,
+            )
+        if unfixable.get("historical"):
+            click.echo(
+                f"    {len(unfixable['historical'])} unfixable in old commits (not tagged) — WARNING",
+                err=True,
+            )
+        if unfixable.get("orphan"):
+            click.echo(
+                f"    {len(unfixable['orphan'])} orphan keys (not in any commit)",
+                err=True,
+            )
+        remaining = total - fixed - stats.get("skipped_no_path", 0) - n_unfixable
         if limit and remaining > 0:
             click.echo(f"    {remaining} not attempted (--limit {limit})", err=True)
+
+        # Accumulate for exit code
+        has_errors = has_errors or bool(unfixable.get("current")) or bool(unfixable.get("tagged"))
 
     if not dry_run and all_fixes:
         _apply_fixes_to_annex_branch(repo, all_fixes)
         click.echo(f"\nApplied {len(all_fixes)} fixes to git-annex branch", err=True)
+
+    if has_errors:
+        sys.exit(1)
 
 
 def _build_key_filepath_map(repo: str) -> dict[str, str]:
@@ -869,6 +909,101 @@ def _build_key_filepath_map_from_symlinks(repo: str) -> dict[str, str]:
             key = os.path.basename(target)
             key_to_filepath[key] = filepath
     return key_to_filepath
+
+
+def _keys_in_tree(repo: str, tree_ref: str) -> set[str]:
+    """Extract all git-annex keys referenced in a tree.
+
+    Checks symlink targets (for annexed files like MD5E) and blob hashes
+    (for non-annexed files tracked by SHA1/SHA256 keys in export trees).
+    """
+    keys = set()
+    try:
+        output = git_run(["ls-tree", "-r", tree_ref], cwd=repo)
+    except subprocess.CalledProcessError:
+        return keys
+
+    for line in output.strip().splitlines():
+        if not line:
+            continue
+        meta, filepath = line.split("\t", 1)
+        parts = meta.split()
+        mode = parts[0]
+        blob_hash = parts[2]
+
+        if mode == "120000":  # symlink = annexed file
+            try:
+                target = git_run(["cat-file", "-p", blob_hash], cwd=repo).strip()
+                keys.add(os.path.basename(target))
+            except subprocess.CalledProcessError:
+                pass
+        # Non-annexed blobs: the git blob hash could be a SHA1 key
+        # (git-annex SHA1 backend uses git hash-object format)
+        # We record the blob hash so callers can check SHA1--<hash> keys
+        keys.add(f"SHA1--{blob_hash}")
+
+    return keys
+
+
+def build_reachability_map(
+    repo: str, keys: set[str],
+) -> dict[str, str]:
+    """Classify keys by reachability: current, tagged, historical, orphan.
+
+    Returns {key: category} for each key in the input set.
+    """
+    result = {k: "orphan" for k in keys}
+    remaining = set(keys)
+
+    # Check HEAD
+    head_keys = _keys_in_tree(repo, "HEAD")
+    for key in list(remaining):
+        if key in head_keys:
+            result[key] = "current"
+            remaining.discard(key)
+    if not remaining:
+        return result
+
+    # Check tags
+    try:
+        tags_output = git_run(["tag"], cwd=repo).strip()
+    except subprocess.CalledProcessError:
+        tags_output = ""
+    tags = [t.strip() for t in tags_output.splitlines() if t.strip()]
+
+    for tag in tags:
+        if not remaining:
+            break
+        tag_keys = _keys_in_tree(repo, tag)
+        for key in list(remaining):
+            if key in tag_keys:
+                result[key] = "tagged"
+                remaining.discard(key)
+    if not remaining:
+        return result
+
+    # Check all commits (expensive — only for remaining keys)
+    try:
+        log_output = git_run(
+            ["log", "--all", "--pretty=format:%H"],
+            cwd=repo,
+        )
+    except subprocess.CalledProcessError:
+        return result
+
+    for commit_hash in log_output.strip().splitlines():
+        if not remaining:
+            break
+        commit_hash = commit_hash.strip()
+        if not commit_hash:
+            continue
+        commit_keys = _keys_in_tree(repo, commit_hash)
+        for key in list(remaining):
+            if key in commit_keys:
+                result[key] = "historical"
+                remaining.discard(key)
+
+    return result
 
 
 def parse_export_log(content: str, remote_uuid: str) -> list[str]:
