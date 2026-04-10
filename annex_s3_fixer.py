@@ -102,6 +102,22 @@ def parse_rmet_file(content: str) -> list[dict]:
     return entries
 
 
+def is_export_tracking_key(key: str) -> bool:
+    """Check if a key is an export-tracking key (not real annexed content).
+
+    Export tracking keys are created by git-annex for non-annexed files
+    in exporttree remotes. They use non-E backends (SHA1, SHA256, MD5)
+    with no size field: e.g. SHA1--<git_blob_hash>.
+
+    Real annexed keys always have a size field: SHA1-s243--<hash>.
+    """
+    if extract_size_from_key(key) is not None:
+        return False
+    # Non-E backend with no size = export tracking key
+    m = re.match(r'(MD5|SHA1|SHA256|SHA512|SHA224|SHA384)--', key)
+    return m is not None
+
+
 def extract_size_from_key(key: str) -> int | None:
     """Extract file size from a git-annex key name.
 
@@ -307,22 +323,6 @@ def match_version_by_size(
     return [v for v in versions if v["Size"] == target_size]
 
 
-def _compute_checksums(data: bytes, hash_name: str) -> list[str]:
-    """Compute both pure and git-style checksums of data.
-
-    Returns [pure_hash, git_style_hash]. git-annex E-variants use pure
-    hashes, non-E variants use git hash-object format (hash of
-    "blob <size>\\0" + content).
-    """
-    pure = hashlib.new(hash_name, data).hexdigest()
-    header = f"blob {len(data)}\0".encode()
-    h = hashlib.new(hash_name)
-    h.update(header)
-    h.update(data)
-    git_style = h.hexdigest()
-    return [pure, git_style]
-
-
 def match_version_by_checksum(
     s3_client,
     bucket: str,
@@ -363,15 +363,17 @@ def match_version_by_checksum(
             response = s3_client.get_object(
                 Bucket=bucket, Key=s3_key, VersionId=version_id,
             )
-            data = response["Body"].read()
-            checksums = _compute_checksums(data, hash_name)
-            if expected_checksum in checksums:
+            h = hashlib.new(hash_name)
+            for chunk in response["Body"].iter_chunks(1024 * 1024):
+                h.update(chunk)
+            computed = h.hexdigest()
+            if computed == expected_checksum:
                 lgr.info("Checksum match for version %s", version_id)
                 return candidate
             else:
                 lgr.debug(
-                    "Version %s checksums %s — none match expected %s",
-                    version_id, checksums, expected_checksum,
+                    "Version %s checksum %s != expected %s",
+                    version_id, computed, expected_checksum,
                 )
         except Exception as e:
             lgr.warning("Failed to download version %s: %s", version_id, e)
@@ -462,6 +464,8 @@ def find_keys_without_urls(ctx, require, remote, all_keys):
                 continue
 
         key = extract_key_from_annex_path(suffixes["log"])
+        if is_export_tracking_key(key):
+            continue
         missing_count += 1
         if verbose:
             click.echo(f"{key}\t(log: {suffixes['log']})")
@@ -574,6 +578,7 @@ def _fix_remote(
     #   - its .log shows it's present on this remote
     #   - its .log.rmet either doesn't exist, or doesn't contain an entry for this remote
     missing_keys = []  # list of (key, log_path, log_entries, existing_rmet_content)
+    skipped_export_tracking = 0
     for stem, suffixes in sorted(groups.items()):
         if "log" not in suffixes:
             continue
@@ -594,8 +599,16 @@ def _fix_remote(
                 continue  # already has rmet for this remote
 
         key = extract_key_from_annex_path(suffixes["log"])
+        if is_export_tracking_key(key):
+            skipped_export_tracking += 1
+            continue
         missing_keys.append((key, suffixes["log"], log_entries, existing_rmet))
 
+    if skipped_export_tracking:
+        click.echo(
+            f"  Skipped {skipped_export_tracking} export-tracking keys (not real annexed content)",
+            err=True,
+        )
     click.echo(f"  Found {len(missing_keys)} keys needing fix", err=True)
 
     if not missing_keys:
@@ -912,11 +925,7 @@ def _build_key_filepath_map_from_symlinks(repo: str) -> dict[str, str]:
 
 
 def _keys_in_tree(repo: str, tree_ref: str) -> set[str]:
-    """Extract all git-annex keys referenced in a tree.
-
-    Checks symlink targets (for annexed files like MD5E) and blob hashes
-    (for non-annexed files tracked by SHA1/SHA256 keys in export trees).
-    """
+    """Extract all git-annex keys referenced in a tree via symlink targets."""
     keys = set()
     try:
         output = git_run(["ls-tree", "-r", tree_ref], cwd=repo)
@@ -937,10 +946,6 @@ def _keys_in_tree(repo: str, tree_ref: str) -> set[str]:
                 keys.add(os.path.basename(target))
             except subprocess.CalledProcessError:
                 pass
-        # Non-annexed blobs: the git blob hash could be a SHA1 key
-        # (git-annex SHA1 backend uses git hash-object format)
-        # We record the blob hash so callers can check SHA1--<hash> keys
-        keys.add(f"SHA1--{blob_hash}")
 
     return keys
 
@@ -1037,11 +1042,11 @@ def parse_export_log(content: str, remote_uuid: str) -> list[str]:
 def _build_key_filepath_map_from_export_trees(
     repo: str, remote_uuid: str, keys_needed: set[str],
 ) -> dict[str, str]:
-    """Find file paths for keys by searching the exported tree(s).
+    """Find file paths for annexed keys by searching the exported tree(s).
 
-    For SHA1 keys, the blob hash in the tree IS the key hash.
-    For other keys (MD5E, etc.), the tree entry is a symlink blob
-    whose content points to the annex object path containing the key name.
+    Looks for symlink entries (mode 120000) whose target contains the key name.
+    Export tracking keys (SHA1--<hash> without size) should already be filtered
+    out before calling this function.
 
     Returns {key: filepath} for keys that were found.
     """
@@ -1055,17 +1060,6 @@ def _build_key_filepath_map_from_export_trees(
     if not trees:
         lgr.debug("No exported trees found for remote %s", remote_uuid)
         return {}
-
-    # Build lookup sets for faster matching
-    # SHA1 keys: the hash part IS the blob hash
-    sha1_hash_to_key = {}
-    other_keys = set()
-    for key in keys_needed:
-        if key.startswith("SHA1--"):
-            blob_hash = key[6:]  # strip "SHA1--"
-            sha1_hash_to_key[blob_hash] = key
-        else:
-            other_keys.add(key)
 
     key_to_filepath: dict[str, str] = {}
 
@@ -1084,21 +1078,15 @@ def _build_key_filepath_map_from_export_trees(
                 continue
             meta, filepath = line.split("\t", 1)
             parts = meta.split()
+            mode = parts[0]
             blob_hash = parts[2]
 
-            # Check SHA1 keys: blob hash matches key hash
-            if blob_hash in sha1_hash_to_key:
-                key = sha1_hash_to_key[blob_hash]
-                if key not in key_to_filepath:
-                    key_to_filepath[key] = filepath
-                    lgr.debug("Found %s -> %s (via export tree blob hash)", key, filepath)
-
-            # Check other keys: read symlink content to find key name
-            if other_keys and parts[0] == "120000":  # symlink
+            # Annexed files are symlinks (mode 120000) pointing to annex objects
+            if mode == "120000":
                 try:
                     symlink_target = git_run(["cat-file", "-p", blob_hash], cwd=repo).strip()
                     target_key = os.path.basename(symlink_target)
-                    if target_key in other_keys and target_key not in key_to_filepath:
+                    if target_key in keys_needed and target_key not in key_to_filepath:
                         key_to_filepath[target_key] = filepath
                         lgr.debug("Found %s -> %s (via export tree symlink)", target_key, filepath)
                 except subprocess.CalledProcessError:
